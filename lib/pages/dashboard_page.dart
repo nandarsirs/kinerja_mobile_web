@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:month_picker_dialog/month_picker_dialog.dart';
 import 'package:intl/intl.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -21,10 +20,22 @@ class _DashboardPageState extends State<DashboardPage> {
   String? userId;
   DateTime selectedMonth = DateTime.now();
 
+  final ScrollController _monthScrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
+
+    // Set bulan sekarang sebagai default
+    selectedMonth = DateTime.now();
+
     _loadUserData();
+
+    // Scroll bulan aktif ke tengah setelah build pertama
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToSelectedMonth();
+      setState(() {}); // pastikan bulan aktif terlihat
+    });
   }
 
   Future<void> _loadUserData() async {
@@ -42,10 +53,9 @@ class _DashboardPageState extends State<DashboardPage> {
     setState(() => isLoading = true);
 
     try {
-      // Filter berdasarkan bulan terpilih
       final startDate = DateTime(selectedMonth.year, selectedMonth.month, 1);
       final endDate =
-          DateTime(selectedMonth.year, selectedMonth.month + 1, 0); // last day
+          DateTime(selectedMonth.year, selectedMonth.month + 1, 0);
 
       final response = await supabase
           .from('kinerja')
@@ -54,7 +64,6 @@ class _DashboardPageState extends State<DashboardPage> {
           .gte('tanggal', startDate.toIso8601String())
           .lte('tanggal', endDate.toIso8601String());
 
-      // Group by kategori
       final Map<int, Map<String, dynamic>> grouped = {};
       for (final item in response) {
         final kategoriId = item['kategori_id'] as int;
@@ -72,7 +81,6 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // Hitung persentase
       final List<Map<String, dynamic>> data = grouped.values.map((e) {
         final target = e['target'] as double;
         final jumlah = e['jumlah'] as int;
@@ -89,8 +97,6 @@ class _DashboardPageState extends State<DashboardPage> {
       setState(() {
         rekapKategori = data;
       });
-
-      debugPrint('Rekap kategori: $rekapKategori');
     } catch (e) {
       debugPrint('❌ Gagal memuat kinerja: $e');
       if (mounted) {
@@ -112,6 +118,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _glassCard({required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.3),
         borderRadius: BorderRadius.circular(20),
@@ -128,22 +135,89 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Future<void> _pickMonth() async {
-    final picked = await showMonthPicker(
-      context: context,
-      initialDate: selectedMonth,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(DateTime.now().year + 1),
+  void _scrollToSelectedMonth() {
+    final index = selectedMonth.month - 1;
+    const itemWidth = 88.0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final offset = index * itemWidth - (screenWidth / 2) + (itemWidth / 2);
+    _monthScrollController.animateTo(
+      offset.clamp(
+        _monthScrollController.position.minScrollExtent,
+        _monthScrollController.position.maxScrollExtent,
+      ),
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
     );
-    if (picked != null && picked != selectedMonth) {
-      setState(() => selectedMonth = picked);
-      fetchRekapKategori();
-    }
+  }
+
+  Widget _glassMonthSelector() {
+    final months = List.generate(
+        12, (index) => DateTime(selectedMonth.year, index + 1, 1));
+
+    return SizedBox(
+      height: 50,
+      child: ListView.builder(
+        controller: _monthScrollController,
+        scrollDirection: Axis.horizontal,
+        itemCount: months.length,
+        itemBuilder: (context, index) {
+          final month = months[index];
+          final isSelected = month.month == selectedMonth.month;
+          final monthName = DateFormat.MMM().format(month);
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                selectedMonth = month;
+              });
+              fetchRekapKategori();
+              _scrollToSelectedMonth();
+            },
+            child: Container(
+              width: 80,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: isSelected
+                    ? const LinearGradient(
+                        colors: [Color(0xFFAA73E0), Color(0xFF7B4BFF)],
+                      )
+                    : null,
+                color: isSelected
+                    ? null
+                    : Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: Colors.purple.withOpacity(isSelected ? 0 : 0.5)),
+                boxShadow: [
+                  if (isSelected)
+                    BoxShadow(
+                      color: Colors.purple.withOpacity(0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 3),
+                    ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                monthName,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.purple,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final monthText = DateFormat.yMMMM().format(selectedMonth);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
       body: Container(
@@ -159,188 +233,176 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.symmetric(
+                horizontal: screenWidth * 0.04, vertical: screenHeight * 0.015),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Header
                 Row(
                   children: [
                     CircleAvatar(
-                      radius: 28,
+                      radius: screenWidth * 0.07,
                       backgroundColor: Colors.white.withOpacity(0.6),
-                      child:
-                          const Icon(Icons.person, color: Colors.purple, size: 28),
+                      child: Icon(Icons.person,
+                          color: Colors.purple, size: screenWidth * 0.07),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: screenWidth * 0.03),
                     Expanded(
                       child: Text(
                         userName,
-                        style: const TextStyle(
-                          color: Colors.black87,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(
+                            fontSize: screenWidth * 0.05,
+                            fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.refresh, color: Colors.purple),
-                      tooltip: 'Refresh',
+                      icon: Icon(Icons.refresh, color: Colors.purple),
                       onPressed: fetchRekapKategori,
                     ),
                     IconButton(
-                      icon: const Icon(Icons.logout, color: Colors.redAccent),
-                      tooltip: 'Logout',
+                      icon: Icon(Icons.logout, color: Colors.redAccent),
                       onPressed: _logout,
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: screenHeight * 0.015),
 
-                // Filter bulan
+                // Glass month selector
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pilih Bulan',
+                      style: TextStyle(
+                          fontSize: screenWidth * 0.04,
+                          fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    _glassMonthSelector(),
+                  ],
+                ),
+                SizedBox(height: screenHeight * 0.015),
+
+                // Expanded cards list
+                Expanded(
+                  child: isLoading
+                      ? Center(
+                          child:
+                              CircularProgressIndicator(color: Colors.purple),
+                        )
+                      : rekapKategori.isEmpty
+                          ? Center(
+                              child: Text(
+                                'Belum ada kinerja',
+                                style: TextStyle(
+                                    fontSize: screenWidth * 0.045,
+                                    color: Colors.black54),
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: rekapKategori.length,
+                              itemBuilder: (context, index) {
+                                final item = rekapKategori[index];
+                                return _glassCard(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item['kategori'] ?? '-',
+                                        style: TextStyle(
+                                          fontSize: screenWidth * 0.045,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.purple[800],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text('Jumlah: ${item['jumlah']}',
+                                              style: TextStyle(
+                                                  fontSize: screenWidth * 0.038)),
+                                          Text('Target: ${item['target']}',
+                                              style: TextStyle(
+                                                  fontSize: screenWidth * 0.038)),
+                                          Text('Nilai: ${item['persentase']}',
+                                              style: TextStyle(
+                                                  fontSize: screenWidth * 0.038)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                ),
+
+                SizedBox(height: screenHeight * 0.015),
+
+                // Tombol tetap di bawah
                 Row(
                   children: [
-                    const Icon(Icons.calendar_today, color: Colors.purple),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: _pickMonth,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 8, horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.purple),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () async {
+                          await context.push('/input-kinerja');
+                          fetchRekapKategori();
+                        },
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                              vertical: screenHeight * 0.015),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                                colors: [Color(0xFFAA73E0), Color(0xFF7B4BFF)]),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.purple.withOpacity(0.3),
+                                blurRadius: 10,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            "Tambah Kinerja",
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: screenWidth * 0.045),
+                          ),
                         ),
-                        child: Text(
-                          monthText,
-                          style: const TextStyle(
-                              color: Colors.purple, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    SizedBox(width: screenWidth * 0.03),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          context.push('/lihat-kinerja');
+                        },
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                              vertical: screenHeight * 0.015),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.purple),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            "Lihat Kinerja",
+                            style: TextStyle(
+                                color: Colors.purple,
+                                fontWeight: FontWeight.bold,
+                                fontSize: screenWidth * 0.045),
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-
-                // Glass card dengan tabel rekap
-                Expanded(
-                  child: _glassCard(
-                    child: isLoading
-                        ? const Center(
-                            child: CircularProgressIndicator(color: Colors.purple),
-                          )
-                        : rekapKategori.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  'Belum ada kinerja',
-                                  style: TextStyle(color: Colors.black54),
-                                ),
-                              )
-                            : SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: DataTable(
-                                  headingTextStyle: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.purple,
-                                  ),
-                                  dataTextStyle: const TextStyle(
-                                    color: Colors.black87,
-                                  ),
-                                  columns: const [
-                                    DataColumn(label: Text('Kategori')),
-                                    DataColumn(label: Text('Jumlah')),
-                                    DataColumn(label: Text('Target')),
-                                    DataColumn(label: Text('Nilai')),
-                                  ],
-                                  rows: rekapKategori.map((item) {
-                                    return DataRow(cells: [
-                                      DataCell(Text(item['kategori'] ?? '-')),
-                                      DataCell(Text(item['jumlah'].toString())),
-                                      DataCell(Text(item['target'].toString())),
-                                      DataCell(Text(item['persentase'] ?? '-')),
-                                    ]);
-                                  }).toList(),
-                                ),
-                              ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Bagian bawah tombol
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // Tombol Tambah Kinerja
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () async {
-                            await context.push('/input-kinerja');
-                            fetchRekapKategori();
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFAA73E0), Color(0xFF7B4BFF)],
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.purple.withOpacity(0.3),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            alignment: Alignment.center,
-                            child: const Text(
-                              "Tambah Kinerja",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(width: 16),
-
-                      // Tombol Lihat Kinerja
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            context.push('/lihat-kinerja'); // nanti buat halaman ini
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.purple),
-                            ),
-                            alignment: Alignment.center,
-                            child: const Text(
-                              "Lihat Kinerja",
-                              style: TextStyle(
-                                color: Colors.purple,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
               ],
             ),
           ),

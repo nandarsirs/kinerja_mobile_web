@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:excel/excel.dart' as ex;
 import 'package:path_provider/path_provider.dart'; // Mobile only
+import 'package:intl/intl.dart';
 
 // Flutter Web import
 // ignore: avoid_web_libraries_in_flutter
@@ -26,6 +27,8 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
 
   bool isLoading = false;
   List<Map<String, dynamic>> kinerjaData = [];
+  List<Map<String, dynamic>> filteredData = [];
+  String searchQuery = '';
 
   @override
   void initState() {
@@ -75,6 +78,7 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
 
       setState(() {
         kinerjaData = List<Map<String, dynamic>>.from(response);
+        _applySearchFilter();
       });
     } catch (e) {
       debugPrint('❌ Gagal mengambil data kinerja: $e');
@@ -85,6 +89,60 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
       }
     } finally {
       if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  void _applySearchFilter() {
+    if (searchQuery.isEmpty) {
+      filteredData = kinerjaData;
+    } else {
+      filteredData = kinerjaData.where((item) {
+        final kategori = item['kategori_kinerja']?['nama']?.toLowerCase() ?? '';
+        final deskripsi = item['deskripsi']?.toLowerCase() ?? '';
+        final query = searchQuery.toLowerCase();
+        return kategori.contains(query) || deskripsi.contains(query);
+      }).toList();
+    }
+  }
+
+  Future<void> exportToExcel() async {
+    if (filteredData.isEmpty) return;
+
+    final excel = ex.Excel.createExcel();
+    final sheet = excel['Kinerja'];
+    sheet.appendRow(['Tanggal', 'Kategori', 'Deskripsi', 'Jam Mulai', 'Jam Selesai']);
+
+    for (final item in filteredData) {
+      sheet.appendRow([
+        item['tanggal'] ?? '-',
+        item['kategori_kinerja']?['nama'] ?? '-',
+        item['deskripsi'] ?? '-',
+        item['jam_mulai'] ?? '-',
+        item['jam_selesai'] ?? '-',
+      ]);
+    }
+
+    if (kIsWeb) {
+      final bytes = excel.encode();
+      if (bytes == null) return;
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute("download", "kinerja_${DateTime.now().millisecondsSinceEpoch}.xlsx")
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    } else {
+      final dir = await getApplicationDocumentsDirectory();
+      final filePath = '${dir.path}/kinerja_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final fileBytes = excel.encode();
+      if (fileBytes == null) return;
+      final file = File(filePath);
+      await file.writeAsBytes(fileBytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('File Excel berhasil dibuat: $filePath')),
+        );
+      }
     }
   }
 
@@ -105,51 +163,6 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
       ),
       child: child,
     );
-  }
-
-  Future<void> exportToExcel() async {
-    if (kinerjaData.isEmpty) return;
-
-    final excel = ex.Excel.createExcel();
-    final sheet = excel['Kinerja'];
-    sheet.appendRow(['Tanggal', 'Kategori', 'Deskripsi', 'Jam Mulai', 'Jam Selesai']);
-
-    for (final item in kinerjaData) {
-      sheet.appendRow([
-        item['tanggal'] ?? '-',
-        item['kategori_kinerja']?['nama'] ?? '-',
-        item['deskripsi'] ?? '-',
-        item['jam_mulai'] ?? '-',
-        item['jam_selesai'] ?? '-',
-      ]);
-    }
-
-    if (kIsWeb) {
-      // Flutter Web
-      final bytes = excel.encode();
-      if (bytes == null) return;
-
-      final blob = html.Blob([bytes]);
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      html.AnchorElement(href: url)
-        ..setAttribute("download", "kinerja_${DateTime.now().millisecondsSinceEpoch}.xlsx")
-        ..click();
-      html.Url.revokeObjectUrl(url);
-    } else {
-      // Mobile
-      final dir = await getApplicationDocumentsDirectory();
-      final filePath = '${dir.path}/kinerja_${DateTime.now().millisecondsSinceEpoch}.xlsx';
-      final fileBytes = excel.encode();
-      if (fileBytes == null) return;
-
-      final file = File(filePath);
-      await file.writeAsBytes(fileBytes);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('File Excel berhasil dibuat: $filePath')),
-        );
-      }
-    }
   }
 
   @override
@@ -175,7 +188,7 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // Pilihan range tanggal
+                // Pilihan range tanggal dan search
                 Row(
                   children: [
                     Expanded(
@@ -190,9 +203,9 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
                           ),
                           child: Text(
                             startDate != null
-                                ? 'Mulai: ${startDate!.toLocal().toString().split(' ')[0]}'
+                                ? 'Mulai: ${DateFormat('dd MMM yyyy').format(startDate!)}'
                                 : 'Pilih tanggal mulai',
-                            style: const TextStyle(color: Colors.purple),
+                            style: const TextStyle(color: Colors.purple, fontSize: 12),
                           ),
                         ),
                       ),
@@ -210,9 +223,9 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
                           ),
                           child: Text(
                             endDate != null
-                                ? 'Selesai: ${endDate!.toLocal().toString().split(' ')[0]}'
+                                ? 'Selesai: ${DateFormat('dd MMM yyyy').format(endDate!)}'
                                 : 'Pilih tanggal selesai',
-                            style: const TextStyle(color: Colors.purple),
+                            style: const TextStyle(color: Colors.purple, fontSize: 12),
                           ),
                         ),
                       ),
@@ -231,6 +244,28 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
                   ],
                 ),
 
+                const SizedBox(height: 8),
+
+                // Pencarian
+                TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Cari kategori atau deskripsi',
+                    fillColor: Colors.white.withOpacity(0.3),
+                    filled: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    prefixIcon: const Icon(Icons.search, color: Colors.purple),
+                  ),
+                  onChanged: (val) {
+                    setState(() {
+                      searchQuery = val;
+                      _applySearchFilter();
+                    });
+                  },
+                ),
+
                 const SizedBox(height: 16),
 
                 // Tabel kinerja
@@ -238,7 +273,7 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
                   child: _glassCard(
                     child: isLoading
                         ? const Center(child: CircularProgressIndicator(color: Colors.purple))
-                        : kinerjaData.isEmpty
+                        : filteredData.isEmpty
                             ? const Center(
                                 child: Text(
                                   'Belum ada kinerja',
@@ -251,9 +286,11 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
                                   headingTextStyle: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: Colors.purple,
+                                    fontSize: 12,
                                   ),
                                   dataTextStyle: const TextStyle(
                                     color: Colors.black87,
+                                    fontSize: 12,
                                   ),
                                   columns: const [
                                     DataColumn(label: Text('Tanggal')),
@@ -262,14 +299,47 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
                                     DataColumn(label: Text('Jam Mulai')),
                                     DataColumn(label: Text('Jam Selesai')),
                                   ],
-                                  rows: kinerjaData.map((item) {
+                                  rows: filteredData.map((item) {
                                     return DataRow(
                                       cells: [
-                                        DataCell(Text(item['tanggal'] ?? '-')),
-                                        DataCell(Text(item['kategori_kinerja']?['nama'] ?? '-')),
-                                        DataCell(Text(item['deskripsi'] ?? '-')),
-                                        DataCell(Text(item['jam_mulai'] ?? '-')),
-                                        DataCell(Text(item['jam_selesai'] ?? '-')),
+                                        DataCell(
+                                          Text(
+                                            item['tanggal'] != null
+                                                ? DateFormat('dd MMM yyyy')
+                                                    .format(DateTime.parse(item['tanggal']))
+                                                : '-',
+                                            overflow: TextOverflow.ellipsis,
+                                            softWrap: false,
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            item['kategori_kinerja']?['nama'] ?? '-',
+                                            overflow: TextOverflow.ellipsis,
+                                            softWrap: false,
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            item['deskripsi'] ?? '-',
+                                            overflow: TextOverflow.ellipsis,
+                                            softWrap: false,
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            item['jam_mulai'] ?? '-',
+                                            overflow: TextOverflow.ellipsis,
+                                            softWrap: false,
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            item['jam_selesai'] ?? '-',
+                                            overflow: TextOverflow.ellipsis,
+                                            softWrap: false,
+                                          ),
+                                        ),
                                       ],
                                     );
                                   }).toList(),

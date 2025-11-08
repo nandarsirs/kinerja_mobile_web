@@ -14,8 +14,8 @@ class _InputKinerjaPageState extends State<InputKinerjaPage> {
   final supabase = Supabase.instance.client;
   final TextEditingController _deskripsiController = TextEditingController();
 
-  DateTime? _selectedDate;
-  TimeOfDay? _jamMulai;
+  DateTime _selectedDate = DateTime.now();
+  TimeOfDay _jamMulai = TimeOfDay.now();
   TimeOfDay? _jamSelesai;
   int? _selectedKategori;
   bool _loading = false;
@@ -42,9 +42,9 @@ class _InputKinerjaPageState extends State<InputKinerjaPage> {
   }
 
   Future<void> _simpanKinerja() async {
-    if (_selectedDate == null || _jamMulai == null || _selectedKategori == null) {
+    if (_selectedKategori == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Harap lengkapi semua kolom wajib')),
+        const SnackBar(content: Text('Harap pilih kategori kinerja')),
       );
       return;
     }
@@ -62,7 +62,7 @@ class _InputKinerjaPageState extends State<InputKinerjaPage> {
       }
 
       final jamMulaiStr =
-          '${_jamMulai!.hour.toString().padLeft(2, '0')}:${_jamMulai!.minute.toString().padLeft(2, '0')}';
+          '${_jamMulai.hour.toString().padLeft(2, '0')}:${_jamMulai.minute.toString().padLeft(2, '0')}';
       final jamSelesaiStr = _jamSelesai != null
           ? '${_jamSelesai!.hour.toString().padLeft(2, '0')}:${_jamSelesai!.minute.toString().padLeft(2, '0')}'
           : null;
@@ -70,7 +70,7 @@ class _InputKinerjaPageState extends State<InputKinerjaPage> {
       await supabase.from('kinerja').insert({
         'user_id': userId,
         'kategori_id': _selectedKategori,
-        'tanggal': DateFormat('yyyy-MM-dd').format(_selectedDate!),
+        'tanggal': DateFormat('yyyy-MM-dd').format(_selectedDate),
         'jam_mulai': jamMulaiStr,
         'jam_selesai': jamSelesaiStr,
         'deskripsi': _deskripsiController.text.trim(),
@@ -108,8 +108,12 @@ class _InputKinerjaPageState extends State<InputKinerjaPage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(color: Colors.black87)),
-            Text(value, style: const TextStyle(color: Colors.black87)),
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.black87, fontWeight: FontWeight.w500)),
+            Text(value,
+                style: const TextStyle(
+                    color: Colors.black87, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -131,6 +135,9 @@ class _InputKinerjaPageState extends State<InputKinerjaPage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -158,103 +165,123 @@ class _InputKinerjaPageState extends State<InputKinerjaPage> {
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _glassPickerTile(
-                    label: 'Tanggal',
-                    value: _selectedDate == null
-                        ? 'Pilih tanggal'
-                        : DateFormat('dd MMM yyyy').format(_selectedDate!),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2100),
-                      );
-                      if (picked != null) setState(() => _selectedDate = picked);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _glassPickerTile(
-                    label: 'Jam Mulai',
-                    value: _jamMulai == null
-                        ? 'Pilih jam mulai'
-                        : _jamMulai!.format(context),
-                    onTap: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (picked != null) setState(() => _jamMulai = picked);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _glassPickerTile(
-                    label: 'Jam Selesai',
-                    value: _jamSelesai == null
-                        ? 'Pilih jam selesai (opsional)'
-                        : _jamSelesai!.format(context),
-                    onTap: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (picked != null) setState(() => _jamSelesai = picked);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<int>(
-                    dropdownColor: Colors.white.withOpacity(0.2),
-                    value: _selectedKategori,
-                    decoration: _glassInputDecoration('Kategori Kinerja'),
-                    items: _kategoriList.map((item) {
-                      return DropdownMenuItem<int>(
-                        value: item['id'] as int,
-                        child: Text(
-                          item['nama'],
+            padding: EdgeInsets.symmetric(
+                horizontal: screenWidth * 0.04, vertical: screenHeight * 0.015),
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        _glassPickerTile(
+                          label: 'Tanggal',
+                          value: DateFormat('dd MMM yyyy').format(_selectedDate),
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: _selectedDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2100),
+                            );
+                            if (picked != null) setState(() => _selectedDate = picked);
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        _glassPickerTile(
+                          label: 'Jam Mulai',
+                          value: _jamMulai.format(context),
+                          onTap: () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: _jamMulai,
+                            );
+                            if (picked != null) setState(() => _jamMulai = picked);
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        _glassPickerTile(
+                          label: 'Jam Selesai',
+                          value: _jamSelesai == null
+                              ? 'Opsional'
+                              : _jamSelesai!.format(context),
+                          onTap: () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: _jamSelesai ?? TimeOfDay.now(),
+                            );
+                            if (picked != null) setState(() => _jamSelesai = picked);
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        // Dropdown Kategori Kinerja dengan background solid
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.purple),
+                          ),
+                          child: DropdownButton<int>(
+                            isExpanded: true,
+                            value: _selectedKategori,
+                            icon: const Icon(Icons.keyboard_arrow_down,
+                                color: Colors.purple),
+                            underline: const SizedBox(),
+                            hint: const Text(
+                              'Pilih Kategori Kinerja',
+                              style: TextStyle(color: Colors.black87),
+                            ),
+                            items: _kategoriList.map((item) {
+                              return DropdownMenuItem<int>(
+                                value: item['id'] as int,
+                                child: Text(
+                                  item['nama'],
+                                  style: const TextStyle(
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w500),
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (val) => setState(() => _selectedKategori = val),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _deskripsiController,
+                          maxLines: 5,
+                          decoration: _glassInputDecoration('Deskripsi Kegiatan'),
                           style: const TextStyle(color: Colors.black87),
                         ),
-                      );
-                    }).toList(),
-                    onChanged: (val) => setState(() => _selectedKategori = val),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _deskripsiController,
-                    maxLines: 5,
-                    decoration: _glassInputDecoration('Deskripsi Kegiatan'),
-                    style: const TextStyle(color: Colors.black87),
-                  ),
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _loading ? null : _simpanKinerja,
-                      style: ElevatedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: Colors.purpleAccent,
-                      ),
-                      child: _loading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              'Simpan',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
-                            ),
+                        const SizedBox(height: 30),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : _simpanKinerja,
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor: Colors.purpleAccent,
+                    ),
+                    child: _loading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            'Simpan',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
