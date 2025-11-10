@@ -41,24 +41,41 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
     });
   }
 
-  Future<void> _pickStartDate() async {
-    final picked = await showDatePicker(
+  // 🔹 Ganti dua date picker jadi satu range picker
+  Future<void> _pickDateRange() async {
+    final picked = await showDateRangePicker(
       context: context,
-      initialDate: startDate ?? DateTime.now(),
+      initialDateRange: startDate != null && endDate != null
+          ? DateTimeRange(start: startDate!, end: endDate!)
+          : DateTimeRange(
+              start: DateTime.now().subtract(const Duration(days: 7)),
+              end: DateTime.now(),
+            ),
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
+      helpText: 'Pilih Rentang Tanggal',
+      cancelText: 'Batal',
+      confirmText: 'Pilih',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Colors.purple, // Warna utama
+              onPrimary: Colors.white, // Teks tombol utama
+              onSurface: Colors.black, // Warna teks tanggal
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
-    if (picked != null) setState(() => startDate = picked);
-  }
 
-  Future<void> _pickEndDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: endDate ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) setState(() => endDate = picked);
+    if (picked != null) {
+      setState(() {
+        startDate = picked.start;
+        endDate = picked.end;
+      });
+    }
   }
 
   Future<void> fetchKinerja() async {
@@ -75,12 +92,13 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
 
       final response = await supabase
           .from('kinerja')
-          .select('tanggal, jam_mulai, jam_selesai, deskripsi, kategori_kinerja(nama)')
+          .select(
+              'tanggal, jam_mulai, jam_selesai, deskripsi, kategori_kinerja(nama)')
           .eq('user_id', userId!)
           .gte('tanggal', start)
           .lte('tanggal', end)
           .order('tanggal', ascending: true)
-          .limit(10000); // ambil semua data hingga 10.000 baris
+          .limit(10000);
 
       debugPrint('📦 Jumlah data: ${response.length}');
 
@@ -113,12 +131,14 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
     }
   }
 
+  // 🔹 Export Excel biasa
   Future<void> exportToExcel() async {
     if (filteredData.isEmpty) return;
 
     final excel = ex.Excel.createExcel();
     final sheet = excel['Kinerja'];
-    sheet.appendRow(['Tanggal', 'Kategori', 'Deskripsi', 'Jam Mulai', 'Jam Selesai']);
+    sheet.appendRow(
+        ['Tanggal', 'Kategori', 'Deskripsi', 'Jam Mulai', 'Jam Selesai']);
 
     for (final item in filteredData) {
       sheet.appendRow([
@@ -130,25 +150,96 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
       ]);
     }
 
+    final bytes = excel.encode();
+    if (bytes == null) return;
+
     if (kIsWeb) {
-      final bytes = excel.encode();
-      if (bytes == null) return;
       final blob = html.Blob([bytes]);
       final url = html.Url.createObjectUrlFromBlob(blob);
       html.AnchorElement(href: url)
-        ..setAttribute("download", "kinerja_${DateTime.now().millisecondsSinceEpoch}.xlsx")
+        ..setAttribute(
+            "download", "kinerja_${DateTime.now().millisecondsSinceEpoch}.xlsx")
         ..click();
       html.Url.revokeObjectUrl(url);
     } else {
       final dir = await getApplicationDocumentsDirectory();
-      final filePath = '${dir.path}/kinerja_${DateTime.now().millisecondsSinceEpoch}.xlsx';
-      final fileBytes = excel.encode();
-      if (fileBytes == null) return;
+      final filePath =
+          '${dir.path}/kinerja_${DateTime.now().millisecondsSinceEpoch}.xlsx';
       final file = File(filePath);
-      await file.writeAsBytes(fileBytes);
+      await file.writeAsBytes(bytes);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('File Excel berhasil dibuat: $filePath')),
+        );
+      }
+    }
+  }
+
+  // 🔹 Export Excel per tanggal
+  Future<void> exportPerTanggalExcel() async {
+    if (filteredData.isEmpty) return;
+
+    final excel = ex.Excel.createExcel();
+    final sheet = excel['Kinerja Per Tanggal'];
+
+    sheet.appendRow(
+        ['Tanggal', 'Kategori', 'Deskripsi', 'Jam Mulai', 'Jam Selesai']);
+
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+
+    for (var d in filteredData) {
+      final tgl = d['tanggal'] ?? '-';
+      grouped.putIfAbsent(tgl, () => []);
+      grouped[tgl]!.add(d);
+    }
+
+    final sortedDates = grouped.keys.toList()
+      ..sort((a, b) {
+        try {
+          return DateTime.parse(a).compareTo(DateTime.parse(b));
+        } catch (_) {
+          return a.compareTo(b);
+        }
+      });
+
+    for (final tgl in sortedDates) {
+      final dataList = grouped[tgl]!;
+
+      for (final item in dataList) {
+        sheet.appendRow([
+          tgl,
+          item['kategori_kinerja']?['nama'] ?? '-',
+          item['deskripsi'] ?? '-',
+          item['jam_mulai'] ?? '-',
+          item['jam_selesai'] ?? '-',
+        ]);
+      }
+
+      sheet.appendRow([]);
+    }
+
+    final bytes = excel.encode();
+    if (bytes == null) return;
+
+    if (kIsWeb) {
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute(
+          "download",
+          "kinerja_per_tanggal_${DateTime.now().millisecondsSinceEpoch}.xlsx",
+        )
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    } else {
+      final dir = await getApplicationDocumentsDirectory();
+      final filePath =
+          '${dir.path}/kinerja_per_tanggal_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('File Excel per tanggal disimpan: $filePath')),
         );
       }
     }
@@ -196,44 +287,26 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // Pilihan range tanggal dan tombol tampilkan
+                // 🔹 Tombol pilih rentang tanggal
                 Row(
                   children: [
                     Expanded(
                       child: GestureDetector(
-                        onTap: _pickStartDate,
+                        onTap: _pickDateRange,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 12, horizontal: 8),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.3),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: Colors.purple),
                           ),
                           child: Text(
-                            startDate != null
-                                ? 'Mulai: ${DateFormat('dd MMM yyyy').format(startDate!)}'
-                                : 'Pilih tanggal mulai',
-                            style: const TextStyle(color: Colors.purple, fontSize: 12),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: _pickEndDate,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.purple),
-                          ),
-                          child: Text(
-                            endDate != null
-                                ? 'Selesai: ${DateFormat('dd MMM yyyy').format(endDate!)}'
-                                : 'Pilih tanggal selesai',
-                            style: const TextStyle(color: Colors.purple, fontSize: 12),
+                            (startDate != null && endDate != null)
+                                ? '${DateFormat('dd MMM yyyy').format(startDate!)} → ${DateFormat('dd MMM yyyy').format(endDate!)}'
+                                : 'Pilih rentang tanggal',
+                            style: const TextStyle(
+                                color: Colors.purple, fontSize: 12),
                           ),
                         ),
                       ),
@@ -242,7 +315,8 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
                     ElevatedButton(
                       onPressed: fetchKinerja,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color.fromARGB(255, 171, 107, 255),
+                        backgroundColor:
+                            const Color.fromARGB(255, 171, 107, 255),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -254,7 +328,7 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
 
                 const SizedBox(height: 8),
 
-                // Pencarian
+                // 🔹 Kolom pencarian
                 TextField(
                   decoration: InputDecoration(
                     hintText: 'Cari kategori atau deskripsi',
@@ -276,11 +350,13 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
 
                 const SizedBox(height: 16),
 
-                // Tabel kinerja
+                // 🔹 Tabel hasil
                 Expanded(
                   child: _glassCard(
                     child: isLoading
-                        ? const Center(child: CircularProgressIndicator(color: Colors.purple))
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                                color: Colors.purple))
                         : filteredData.isEmpty
                             ? const Center(
                                 child: Text(
@@ -316,14 +392,20 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
                                             Text(
                                               item['tanggal'] != null
                                                   ? DateFormat('dd MMM yyyy')
-                                                      .format(DateTime.parse(item['tanggal']))
+                                                      .format(DateTime.parse(
+                                                          item['tanggal']))
                                                   : '-',
                                             ),
                                           ),
-                                          DataCell(Text(item['kategori_kinerja']?['nama'] ?? '-')),
-                                          DataCell(Text(item['deskripsi'] ?? '-')),
-                                          DataCell(Text(item['jam_mulai'] ?? '-')),
-                                          DataCell(Text(item['jam_selesai'] ?? '-')),
+                                          DataCell(Text(item['kategori_kinerja']
+                                                  ?['nama'] ??
+                                              '-')),
+                                          DataCell(Text(item['deskripsi'] ??
+                                              '-')),
+                                          DataCell(Text(
+                                              item['jam_mulai'] ?? '-')),
+                                          DataCell(Text(
+                                              item['jam_selesai'] ?? '-')),
                                         ],
                                       );
                                     }).toList(),
@@ -333,31 +415,53 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
                   ),
                 ),
 
-                // Jumlah data ditampilkan
                 if (filteredData.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       'Menampilkan ${filteredData.length} data',
                       style: const TextStyle(
-                        fontStyle: FontStyle.italic,
-                        fontSize: 12,
-                        color: Colors.black54,
-                      ),
+                          fontStyle: FontStyle.italic,
+                          fontSize: 12,
+                          color: Colors.black54),
                     ),
                   ),
 
                 const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: exportToExcel,
-                  icon: const Icon(Icons.download),
-                  label: const Text('Download Excel'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color.fromARGB(255, 171, 107, 255),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+
+                // 🔹 Tombol export
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: exportToExcel,
+                        icon: const Icon(Icons.download),
+                        label: const Text('Download Biasa'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              const Color.fromARGB(255, 171, 107, 255),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: exportPerTanggalExcel,
+                        icon: const Icon(Icons.calendar_today),
+                        label: const Text('Per Tanggal'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              const Color.fromARGB(255, 140, 90, 220),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
