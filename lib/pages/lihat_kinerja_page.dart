@@ -1,4 +1,4 @@
-import 'dart:io' show File; // Hanya untuk Mobile
+import 'dart:io' show File; // Mobile only
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,10 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:excel/excel.dart' as ex;
 import 'package:path_provider/path_provider.dart'; // Mobile only
 import 'package:intl/intl.dart';
-
-// Flutter Web import
 // ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'dart:html' as html; // Web only
 
 class LihatKinerjaPage extends StatefulWidget {
   const LihatKinerjaPage({super.key});
@@ -69,12 +67,22 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
     setState(() => isLoading = true);
 
     try {
+      final dateFormat = DateFormat('yyyy-MM-dd');
+      final start = dateFormat.format(startDate!);
+      final end = dateFormat.format(endDate!);
+
+      debugPrint('📅 Filter tanggal: $start → $end untuk user $userId');
+
       final response = await supabase
           .from('kinerja')
           .select('tanggal, jam_mulai, jam_selesai, deskripsi, kategori_kinerja(nama)')
           .eq('user_id', userId!)
-          .gte('tanggal', startDate!.toIso8601String())
-          .lte('tanggal', endDate!.toIso8601String());
+          .gte('tanggal', start)
+          .lte('tanggal', end)
+          .order('tanggal', ascending: true)
+          .limit(10000); // ambil semua data hingga 10.000 baris
+
+      debugPrint('📦 Jumlah data: ${response.length}');
 
       setState(() {
         kinerjaData = List<Map<String, dynamic>>.from(response);
@@ -188,7 +196,7 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // Pilihan range tanggal dan search
+                // Pilihan range tanggal dan tombol tampilkan
                 Row(
                   children: [
                     Expanded(
@@ -282,71 +290,62 @@ class _LihatKinerjaPageState extends State<LihatKinerjaPage> {
                               )
                             : SingleChildScrollView(
                                 scrollDirection: Axis.horizontal,
-                                child: DataTable(
-                                  headingTextStyle: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.purple,
-                                    fontSize: 12,
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.vertical,
+                                  child: DataTable(
+                                    headingTextStyle: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.purple,
+                                      fontSize: 12,
+                                    ),
+                                    dataTextStyle: const TextStyle(
+                                      color: Colors.black87,
+                                      fontSize: 12,
+                                    ),
+                                    columns: const [
+                                      DataColumn(label: Text('Tanggal')),
+                                      DataColumn(label: Text('Kategori')),
+                                      DataColumn(label: Text('Deskripsi')),
+                                      DataColumn(label: Text('Jam Mulai')),
+                                      DataColumn(label: Text('Jam Selesai')),
+                                    ],
+                                    rows: filteredData.map((item) {
+                                      return DataRow(
+                                        cells: [
+                                          DataCell(
+                                            Text(
+                                              item['tanggal'] != null
+                                                  ? DateFormat('dd MMM yyyy')
+                                                      .format(DateTime.parse(item['tanggal']))
+                                                  : '-',
+                                            ),
+                                          ),
+                                          DataCell(Text(item['kategori_kinerja']?['nama'] ?? '-')),
+                                          DataCell(Text(item['deskripsi'] ?? '-')),
+                                          DataCell(Text(item['jam_mulai'] ?? '-')),
+                                          DataCell(Text(item['jam_selesai'] ?? '-')),
+                                        ],
+                                      );
+                                    }).toList(),
                                   ),
-                                  dataTextStyle: const TextStyle(
-                                    color: Colors.black87,
-                                    fontSize: 12,
-                                  ),
-                                  columns: const [
-                                    DataColumn(label: Text('Tanggal')),
-                                    DataColumn(label: Text('Kategori')),
-                                    DataColumn(label: Text('Deskripsi')),
-                                    DataColumn(label: Text('Jam Mulai')),
-                                    DataColumn(label: Text('Jam Selesai')),
-                                  ],
-                                  rows: filteredData.map((item) {
-                                    return DataRow(
-                                      cells: [
-                                        DataCell(
-                                          Text(
-                                            item['tanggal'] != null
-                                                ? DateFormat('dd MMM yyyy')
-                                                    .format(DateTime.parse(item['tanggal']))
-                                                : '-',
-                                            overflow: TextOverflow.ellipsis,
-                                            softWrap: false,
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            item['kategori_kinerja']?['nama'] ?? '-',
-                                            overflow: TextOverflow.ellipsis,
-                                            softWrap: false,
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            item['deskripsi'] ?? '-',
-                                            overflow: TextOverflow.ellipsis,
-                                            softWrap: false,
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            item['jam_mulai'] ?? '-',
-                                            overflow: TextOverflow.ellipsis,
-                                            softWrap: false,
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            item['jam_selesai'] ?? '-',
-                                            overflow: TextOverflow.ellipsis,
-                                            softWrap: false,
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  }).toList(),
                                 ),
                               ),
                   ),
                 ),
+
+                // Jumlah data ditampilkan
+                if (filteredData.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Menampilkan ${filteredData.length} data',
+                      style: const TextStyle(
+                        fontStyle: FontStyle.italic,
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
 
                 const SizedBox(height: 16),
                 ElevatedButton.icon(

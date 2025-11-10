@@ -25,17 +25,9 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
-
-    // Set bulan sekarang sebagai default
     selectedMonth = DateTime.now();
-
     _loadUserData();
-
-    // Scroll bulan aktif ke tengah setelah build pertama
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToSelectedMonth();
-      setState(() {}); // pastikan bulan aktif terlihat
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelectedMonth());
   }
 
   Future<void> _loadUserData() async {
@@ -49,13 +41,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> fetchRekapKategori() async {
     if (userId == null) return;
-
     setState(() => isLoading = true);
 
     try {
       final startDate = DateTime(selectedMonth.year, selectedMonth.month, 1);
-      final endDate =
-          DateTime(selectedMonth.year, selectedMonth.month + 1, 0);
+      final endDate = DateTime(selectedMonth.year, selectedMonth.month + 1, 0);
 
       final response = await supabase
           .from('kinerja')
@@ -81,7 +71,7 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      final List<Map<String, dynamic>> data = grouped.values.map((e) {
+      final data = grouped.values.map((e) {
         final target = e['target'] as double;
         final jumlah = e['jumlah'] as int;
         final persentase =
@@ -94,9 +84,7 @@ class _DashboardPageState extends State<DashboardPage> {
         };
       }).toList();
 
-      setState(() {
-        rekapKategori = data;
-      });
+      setState(() => rekapKategori = data);
     } catch (e) {
       debugPrint('❌ Gagal memuat kinerja: $e');
       if (mounted) {
@@ -117,15 +105,14 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _glassCard({required Widget child}) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.3),
+        color: Colors.white.withOpacity(0.35),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withOpacity(0.08),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -151,9 +138,8 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _glassMonthSelector() {
-    final months = List.generate(
-        12, (index) => DateTime(selectedMonth.year, index + 1, 1));
-
+    final months =
+        List.generate(12, (index) => DateTime(selectedMonth.year, index + 1, 1));
     return SizedBox(
       height: 50,
       child: ListView.builder(
@@ -167,26 +153,21 @@ class _DashboardPageState extends State<DashboardPage> {
 
           return GestureDetector(
             onTap: () {
-              setState(() {
-                selectedMonth = month;
-              });
+              setState(() => selectedMonth = month);
               fetchRekapKategori();
               _scrollToSelectedMonth();
             },
             child: Container(
               width: 80,
               margin: const EdgeInsets.symmetric(horizontal: 4),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 gradient: isSelected
                     ? const LinearGradient(
                         colors: [Color(0xFFAA73E0), Color(0xFF7B4BFF)],
                       )
                     : null,
-                color: isSelected
-                    ? null
-                    : Colors.white.withOpacity(0.3),
+                color: isSelected ? null : Colors.white.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                     color: Colors.purple.withOpacity(isSelected ? 0 : 0.5)),
@@ -216,8 +197,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
+    final w = MediaQuery.of(context).size.width;
+    final h = MediaQuery.of(context).size.height;
 
     return Scaffold(
       body: Container(
@@ -233,115 +214,124 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         child: SafeArea(
           child: Padding(
-            padding: EdgeInsets.symmetric(
-                horizontal: screenWidth * 0.04, vertical: screenHeight * 0.015),
+            padding:
+                EdgeInsets.symmetric(horizontal: w * 0.04, vertical: h * 0.015),
             child: Column(
               children: [
-                // Header
+                // ------------------ HEADER ------------------
                 Row(
                   children: [
                     CircleAvatar(
-                      radius: screenWidth * 0.07,
+                      radius: w * 0.07,
                       backgroundColor: Colors.white.withOpacity(0.6),
                       child: Icon(Icons.person,
-                          color: Colors.purple, size: screenWidth * 0.07),
+                          color: Colors.purple, size: w * 0.07),
                     ),
-                    SizedBox(width: screenWidth * 0.03),
+                    SizedBox(width: w * 0.03),
                     Expanded(
                       child: Text(
                         userName,
                         style: TextStyle(
-                            fontSize: screenWidth * 0.05,
-                            fontWeight: FontWeight.bold),
+                            fontSize: w * 0.05, fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.refresh, color: Colors.purple),
+                      icon: const Icon(Icons.refresh, color: Colors.purple),
                       onPressed: fetchRekapKategori,
                     ),
                     IconButton(
-                      icon: Icon(Icons.logout, color: Colors.redAccent),
+                      icon: const Icon(Icons.logout, color: Colors.redAccent),
                       onPressed: _logout,
                     ),
                   ],
                 ),
-                SizedBox(height: screenHeight * 0.015),
 
-                // Glass month selector
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Pilih Bulan',
-                      style: TextStyle(
-                          fontSize: screenWidth * 0.04,
-                          fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 6),
-                    _glassMonthSelector(),
-                  ],
-                ),
-                SizedBox(height: screenHeight * 0.015),
+                SizedBox(height: h * 0.02),
 
-                // Expanded cards list
+                // ------------------ CARD ISI UTAMA ------------------
                 Expanded(
-                  child: isLoading
-                      ? Center(
-                          child:
-                              CircularProgressIndicator(color: Colors.purple),
-                        )
-                      : rekapKategori.isEmpty
-                          ? Center(
-                              child: Text(
-                                'Belum ada kinerja',
-                                style: TextStyle(
-                                    fontSize: screenWidth * 0.045,
-                                    color: Colors.black54),
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: rekapKategori.length,
-                              itemBuilder: (context, index) {
-                                final item = rekapKategori[index];
-                                return _glassCard(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        item['kategori'] ?? '-',
+                  child: _glassCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Pilih Bulan
+                        Text(
+                          'Pilih Bulan',
+                          style: TextStyle(
+                              fontSize: w * 0.04, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        _glassMonthSelector(),
+                        const SizedBox(height: 12),
+
+                        // Data Kinerja
+                        Expanded(
+                          child: isLoading
+                              ? const Center(
+                                  child: CircularProgressIndicator(
+                                      color: Colors.purple),
+                                )
+                              : rekapKategori.isEmpty
+                                  ? const Center(
+                                      child: Text(
+                                        'Belum ada kinerja',
                                         style: TextStyle(
-                                          fontSize: screenWidth * 0.045,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.purple[800],
-                                        ),
+                                            fontSize: 16, color: Colors.black54),
                                       ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text('Jumlah: ${item['jumlah']}',
-                                              style: TextStyle(
-                                                  fontSize: screenWidth * 0.038)),
-                                          Text('Target: ${item['target']}',
-                                              style: TextStyle(
-                                                  fontSize: screenWidth * 0.038)),
-                                          Text('Nilai: ${item['persentase']}',
-                                              style: TextStyle(
-                                                  fontSize: screenWidth * 0.038)),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
+                                    )
+                                  : ListView.builder(
+                                      itemCount: rekapKategori.length,
+                                      itemBuilder: (context, index) {
+                                        final item = rekapKategori[index];
+                                        return Container(
+                                          margin:
+                                              const EdgeInsets.only(bottom: 10),
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withOpacity(0.3),
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                            border: Border.all(
+                                                color: Colors.white24),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                item['kategori'] ?? '-',
+                                                style: TextStyle(
+                                                  fontSize: w * 0.045,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.purple[800],
+                                                ),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
+                                                children: [
+                                                  Text('Jumlah: ${item['jumlah']}'),
+                                                  Text('Target: ${item['target']}'),
+                                                  Text('Nilai: ${item['persentase']}'),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
 
-                SizedBox(height: screenHeight * 0.015),
+                SizedBox(height: h * 0.015),
 
-                // Tombol tetap di bawah
+                // ------------------ TOMBOL BAWAH ------------------
                 Row(
                   children: [
                     Expanded(
@@ -351,17 +341,18 @@ class _DashboardPageState extends State<DashboardPage> {
                           fetchRekapKategori();
                         },
                         child: Container(
-                          padding: EdgeInsets.symmetric(
-                              vertical: screenHeight * 0.015),
+                          padding:
+                              EdgeInsets.symmetric(vertical: h * 0.015),
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                                colors: [Color(0xFFAA73E0), Color(0xFF7B4BFF)]),
+                              colors: [Color(0xFFAA73E0), Color(0xFF7B4BFF)],
+                            ),
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.purple.withOpacity(0.3),
                                 blurRadius: 10,
-                                offset: Offset(0, 4),
+                                offset: const Offset(0, 4),
                               ),
                             ],
                           ),
@@ -371,20 +362,18 @@ class _DashboardPageState extends State<DashboardPage> {
                             style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
-                                fontSize: screenWidth * 0.045),
+                                fontSize: w * 0.045),
                           ),
                         ),
                       ),
                     ),
-                    SizedBox(width: screenWidth * 0.03),
+                    SizedBox(width: w * 0.03),
                     Expanded(
                       child: GestureDetector(
-                        onTap: () {
-                          context.push('/lihat-kinerja');
-                        },
+                        onTap: () => context.push('/lihat-kinerja'),
                         child: Container(
-                          padding: EdgeInsets.symmetric(
-                              vertical: screenHeight * 0.015),
+                          padding:
+                              EdgeInsets.symmetric(vertical: h * 0.015),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.3),
                             borderRadius: BorderRadius.circular(20),
@@ -396,7 +385,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             style: TextStyle(
                                 color: Colors.purple,
                                 fontWeight: FontWeight.bold,
-                                fontSize: screenWidth * 0.045),
+                                fontSize: w * 0.045),
                           ),
                         ),
                       ),
